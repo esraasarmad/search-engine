@@ -1,0 +1,22 @@
+# Ignore virtual environments
+venv/
+env/
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore index files (Whoosh index or similar)
+indexdir/
+*.toc
+*.seg
+*WRITELOCK
+
+# Ignore VSCode settings
+.vscode/
+
+# Ignore system files
+.DS_Store
+Thumbs.db
