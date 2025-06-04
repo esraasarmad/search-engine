@@ -224,15 +224,19 @@
                 <div class="search-result-item">
                     <a href="{{ result.url }}" class="result-title" target="_blank">{{ result.title }}</a>
                     <span class="result-url">{{ result.url }}</span>
-                    
-                    <p class="result-teaser">{{ result.teaser }}</p>
-                    
-                    <small class="text-muted d-block mt-2">
-                        👤 الكاتب: {{ result.author if result.author != "unknown" else "غير معروف" }}<br>
-                        🔐 درجة الثقة: {{ result.trust_score }} / 10
-                    </small>
-                </div>
-                
+                    {% if result.teaser %}
+                    <p class="result-intro text-muted mt-2">{{ result.teaser }}</p>
+                    {% endif %}
+                  
+                    <div class="mt-2">
+                        <p><strong> نوع المحتوى:</strong> {{ result.kind }}</p>
+                        <p><strong> الرياضات:</strong> {{ result.sports }}</p>
+                        <p><strong> التحديث:</strong> {{ result.live_status }}</p>
+                        <p><strong> الكاتب:</strong> {{ result.author }}</p>
+                        <p><strong> درجة الثقة:</strong> {{ result.trust_score }} / 10</p>
+                      </div>
+                  </div>
+                  
                 {% endfor %}
                 
        
