@@ -47,6 +47,7 @@ def count_outgoing_links(soup):
 def has_author_info(text):
     return 'author' in text.lower() or 'by' in text.lower()
 
+# دالة محسّنة لحساب درجة الثقة مع الأخذ في الاعتبار أنواع المصداقية
 def calculate_trust_score(url, soup):
     from urllib.parse import urlparse
     text = soup.get_text(separator=' ', strip=True)
@@ -54,21 +55,54 @@ def calculate_trust_score(url, soup):
     domain = parsed.netloc
 
     score = 0
-    if uses_https(url): score += 2
-    if domain_trust_score(url): score += 3
+    credibility_types_detected = [] # لتتبع أنواع المصداقية المكتشفة
 
+    # 1. المصداقية المفترضة (Presumed credibility): تعتمد على افتراضات عامة عن المصدر
+    #    (هنا: استخدام HTTPS، المجالات الموثوقة)
+    if uses_https(url):
+        score += 2
+        credibility_types_detected.append("Presumed (HTTPS)")
+    if domain_trust_score(url):
+        score += 3
+        credibility_types_detected.append("Presumed (Trusted Domain)")
+
+    # 2. المصداقية المكتسبة (Reputed credibility): بناءً على تقييم أطراف ثالثة في الماضي
+    #    (هنا: عمر النطاق كبديل بسيط للاسم الجيد أو السمعة)
     domain_age = get_domain_age(domain)
-    score += 2 if domain_age >= 5 else 1 if domain_age >= 1 else 0
+    if domain_age >= 5:
+        score += 2
+        credibility_types_detected.append("Reputed (Domain Age >= 5)")
+    elif domain_age >= 1:
+        score += 1
+        credibility_types_detected.append("Reputed (Domain Age >= 1)")
 
+    # 3. المصداقية السطحية (Surface credibility): المظهر الجمالي أو الاحترافي (صعب التقييم تلقائيًا)
+    #    (يمكن تمثيله جزئيًا بمؤشرات مثل وجود معلومات المؤلف وعدد الروابط الخارجية)
+    #    *ملاحظة: هذا تقدير تقريبي جداً. التقييم الحقيقي للمصداقية السطحية يتطلب تحليل التصميم، الأخطاء الإملائية/النحوية، إلخ.*
     readability = readability_score(text)
-    score += 2 if readability > 60 else 1 if readability > 30 else 0
+    if readability > 60:
+        score += 2
+        credibility_types_detected.append("Surface (High Readability)")
+    elif readability > 30:
+        score += 1
+        credibility_types_detected.append("Surface (Moderate Readability)")
 
-    if has_author_info(text): score += 1
+    if has_author_info(text):
+        score += 1
+        credibility_types_detected.append("Surface (Author Info Present)")
 
     links = count_outgoing_links(soup)
-    score += 2 if links > 10 else 1 if links > 3 else 0
+    if links > 10:
+        score += 2
+        credibility_types_detected.append("Surface (Many Outgoing Links)") # يمكن أن يشير إلى مصادر غنية، ولكن يمكن أن يكون إشارة لـ spam أيضاً
+    elif links > 3:
+        score += 1
+        credibility_types_detected.append("Surface (Some Outgoing Links)")
 
-    return score
+    # 4. المصداقية القائمة على الخبرة (Experienced credibility): تتطلب تفاعل المستخدم المباشر
+    #    (لا يمكن تقييمها مباشرة بواسطة الزاحف، ولكن يمكن دمجها لاحقاً من بيانات السلوك)
+
+    return score, credibility_types_detected # إرجاع درجة الثقة وأنواع المصداقية المكتشفة
 
 def extract_author(soup):
     # من <meta name="author">
@@ -97,7 +131,8 @@ schema = Schema(
     title=TEXT(stored=True, analyzer=StemmingAnalyzer()),
     content=TEXT(stored=True, analyzer=StemmingAnalyzer()),
     trust_score=NUMERIC(stored=True),
-    author=TEXT(stored=True)
+    author=TEXT(stored=True),
+    credibility_types=TEXT(stored=True) # حقل جديد لتخزين أنواع المصداقية
 )
 
 if not os.path.exists(INDEX_DIR):
@@ -134,13 +169,21 @@ def crawl_site(start_url, max_pages):
         title = soup.title.string.strip() if soup.title and soup.title.string else "No Title"
         content = soup.get_text(separator=' ', strip=True)
 
-        trust_score = calculate_trust_score(url, soup)
+        # استدعاء دالة calculate_trust_score المعدلة
+        trust_score, credibility_types = calculate_trust_score(url, soup)
         author = extract_author(soup)
 
         if trust_score >= 5:  # فقط الصفحات الموثوقة
-            writer.add_document(url=url, title=title, content=content, trust_score=trust_score, author=author)
+            writer.add_document(
+                url=url,
+                title=title,
+                content=content,
+                trust_score=trust_score,
+                author=author,
+                credibility_types=",".join(credibility_types) # تخزين الأنواع كقائمة مفصولة بفاصلة
+            )
             pages_crawled += 1
-            print(f"✅ Indexed (Trust Score: {trust_score}, Author: {author})")
+            print(f"✅ Indexed (Trust Score: {trust_score}, Author: {author}, Types: {', '.join(credibility_types)})")
 
         if max_pages > 0 and pages_crawled >= max_pages:
             break
@@ -158,4 +201,4 @@ for site in TARGET_SITES:
     crawl_site(site, MAX_PAGES_PER_SITE)
 
 writer.commit()
-print("✅ Crawling and indexing with trust score completed.")
+print("✅ Crawling and indexing with trust score and credibility types completed.")

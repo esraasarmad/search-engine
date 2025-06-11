@@ -109,25 +109,49 @@ def results():
         )
 
     ix = open_dir(INDEX_DIR)
-    qp = MultifieldParser(["title", "content"], schema=ix.schema)
+    qp = MultifieldParser(
+        ["title", "content"],
+        fieldboosts={"title": 2.0, "content": 1.0},
+        schema=ix.schema
+    )
     qp.add_plugin(PhrasePlugin())
     q = qp.parse(escape(query))
 
     with ix.searcher(weighting=BM25F(B=0.5, K1=1.5)) as searcher:
         results = searcher.search(q, limit=None)
-        total_results = len(results)
+
+        scored_results = []
+        for r in results:
+            scored_results.append({
+                "result_obj": r,
+                "whoosh_score": r.score,
+                "trust_score": r.get("trust_score", 0)
+            })
+
+        sorted_results = sorted(
+            scored_results,
+            key=lambda x: (x["whoosh_score"] * 0.8) + (x["trust_score"] * 0.2),
+            reverse=True
+        )
+
+        total_results = len(sorted_results)
         total_pages = ceil(total_results / per_page)
 
         start = (page - 1) * per_page
         end = start + per_page
-        current_results = results[start:end]
+        current_results = sorted_results[start:end]
 
         results_list = []
-        for result in current_results:
+        for item in current_results:
+            result = item["result_obj"]
             raw_html = result.get("content", "")
             main_text = extract_main_content(raw_html)
             teaser = extract_weighted_keywords_snippet(main_text, query)
             kind, sports_str, is_live = summarize_result(main_text, query)
+            
+            # استخراج أنواع المصداقية المخزنة
+            credibility_types_str = result.get("credibility_types", "")
+            credibility_types_display = credibility_types_str.replace(",", ", ") if credibility_types_str else "غير محدد"
 
             results_list.append({
                 "url": result["url"],
@@ -137,7 +161,8 @@ def results():
                 "trust_score": result.get("trust_score", 0),
                 "kind": kind,
                 "sports": sports_str,
-                "live_status": is_live
+                "live_status": is_live,
+                "credibility_types": credibility_types_display # إضافة هذا إلى القائمة
             })
 
         pagination = {
@@ -147,8 +172,8 @@ def results():
             "total_pages": total_pages,
             "has_prev": page > 1,
             "has_next": page < total_pages,
-            "prev_num": page - 1,
-            "next_num": page + 1,
+            "prev_num": page + 1,
+            "next_num": page - 1,
         }
 
     return render_template(
