@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 import re
 
 
+
 app = Flask(__name__)
 
 def extract_main_content(html):
@@ -41,29 +42,37 @@ def extract_main_content(html):
     return soup.get_text(separator=' ', strip=True)
 
 
-# 🔍 دالة تلخيص ذكية لتحديد نوع المحتوى والرياضات
 def summarize_result(content, query):
     content_lower = content.lower()
 
-    # نوع المحتوى
-    if "live" in content_lower or "results" in content_lower or "score" in content_lower:
-        kind = "Live Scores Page"
-    elif "schedule" in content_lower or "fixtures" in content_lower:
-        kind = "Match Schedule"
-    elif "news" in content_lower or "preview" in content_lower:
-        kind = "News Article"
+    # تصنيف نوع المحتوى
+    if "interview with" in content_lower or "conversation with" in content_lower:
+        kind = "Author Interview"
+    elif "book review" in content_lower or "our review" in content_lower or "reviewed by" in content_lower:
+        kind = "Book Review"
+    elif "top books" in content_lower or "best books" in content_lower or "reading list" in content_lower:
+        kind = "Book List"
+    elif "analysis" in content_lower or "literary analysis" in content_lower:
+        kind = "Literary Analysis"
+    elif "excerpt from" in content_lower or "chapter one" in content_lower:
+        kind = "Book Excerpt"
     else:
-        kind = "General Sports Content"
+        kind = "General Book Content"
 
-    # أنواع الرياضات
-    sports_keywords = ["football", "soccer", "tennis", "golf", "basketball", "f1", "cricket", "rugby", "nfl"]
-    sports_found = [sport.capitalize() for sport in sports_keywords if sport in content_lower]
-    sports_str = ", ".join(sports_found) if sports_found else "Unspecified"
+    # تحديد الجنس الأدبي (genre)
+    genre_keywords = [
+        "fantasy", "thriller", "romance", "science fiction", "sci-fi", "non-fiction",
+        "biography", "memoir", "horror", "mystery", "historical fiction", "young adult",
+        "poetry", "drama", "classics", "philosophy"
+    ]
+    genres_found = [genre.title() for genre in genre_keywords if genre in content_lower]
+    genres_str = ", ".join(genres_found) if genres_found else "Unspecified"
 
-    # حالة التحديث
-    is_live = "Live" if any(word in content_lower for word in ["live", "now", "updated", "streaming"]) else "Not Live"
+    # لا يوجد "Live" هنا، نستبدله بحالة نشر حديث
+    is_recent = "Recent" if "2024" in content_lower or "2025" in content_lower else "Archived"
 
-    return kind, sports_str, is_live
+    return kind, genres_str, is_recent
+
 
 def extract_weighted_keywords_snippet(text, query, max_words=20):
     # تنظيف النص وتحويله إلى كلمات
@@ -147,7 +156,8 @@ def results():
             raw_html = result.get("content", "")
             main_text = extract_main_content(raw_html)
             teaser = extract_weighted_keywords_snippet(main_text, query)
-            kind, sports_str, is_live = summarize_result(main_text, query)
+            kind, genres_str, is_recent = summarize_result(main_text, query)
+
             
             # استخراج أنواع المصداقية المخزنة
             credibility_types_str = result.get("credibility_types", "")
@@ -157,13 +167,13 @@ def results():
                 "url": result["url"],
                 "title": result["title"],
                 "teaser": teaser,
-                "author": result.get("author", "Unknown"),
                 "trust_score": result.get("trust_score", 0),
                 "kind": kind,
-                "sports": sports_str,
-                "live_status": is_live,
-                "credibility_types": credibility_types_display # إضافة هذا إلى القائمة
-            })
+                "genres": genres_str,
+                "recent_status": is_recent,
+                "credibility_types": credibility_types_display
+})
+
 
         pagination = {
             "page": page,

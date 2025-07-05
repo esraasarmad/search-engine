@@ -9,17 +9,14 @@ from whoosh.index import create_in
 from whoosh.analysis import StemmingAnalyzer
 import whois
 import datetime
-
+import shutil
+from whoosh import index
 from config import INDEX_DIR, MAX_PAGES_PER_SITE, TARGET_SITES, USER_AGENT
 
 # ------------------ تقييم الثقة ------------------
 
 def uses_https(url):
     return url.lower().startswith("https://")
-
-def domain_trust_score(url):
-    trusted_domains = ['.gov', '.edu', 'who.int', 'bbc.com', 'nytimes.com']
-    return any(domain in url for domain in trusted_domains)
 
 def get_domain_age(domain_name):
     try:
@@ -45,7 +42,7 @@ def count_outgoing_links(soup):
     return len(soup.find_all('a'))
 
 def has_author_info(text):
-    return 'author' in text.lower() or 'by' in text.lower()
+    return 'author' in text.lower() or 'by' in text.lower() or 'written by' in text.lower()
 
 # دالة محسّنة لحساب درجة الثقة مع الأخذ في الاعتبار أنواع المصداقية
 def calculate_trust_score(url, soup):
@@ -62,10 +59,7 @@ def calculate_trust_score(url, soup):
     if uses_https(url):
         score += 2
         credibility_types_detected.append("Presumed (HTTPS)")
-    if domain_trust_score(url):
-        score += 3
-        credibility_types_detected.append("Presumed (Trusted Domain)")
-
+    
     # 2. المصداقية المكتسبة (Reputed credibility): بناءً على تقييم أطراف ثالثة في الماضي
     #    (هنا: عمر النطاق كبديل بسيط للاسم الجيد أو السمعة)
     domain_age = get_domain_age(domain)
@@ -104,26 +98,6 @@ def calculate_trust_score(url, soup):
 
     return score, credibility_types_detected # إرجاع درجة الثقة وأنواع المصداقية المكتشفة
 
-def extract_author(soup):
-    # من <meta name="author">
-    meta = soup.find("meta", attrs={"name": "author"})
-    if meta and meta.get("content"):
-        return meta["content"].strip()
-
-    # من class معروف
-    author_tags = soup.find_all(class_=["author", "byline", "writer"])
-    for tag in author_tags:
-        if tag.get_text(strip=True):
-            return tag.get_text(strip=True)
-
-    # fallback: فحص كلمات like "by NAME"
-    text = soup.get_text()
-    for line in text.split("\n"):
-        if line.lower().strip().startswith("by "):
-            return line.strip()
-
-    return "unknown"
-
 # ------------------ إنشاء الفهرس ------------------
 
 schema = Schema(
@@ -135,11 +109,13 @@ schema = Schema(
     credibility_types=TEXT(stored=True) # حقل جديد لتخزين أنواع المصداقية
 )
 
-if not os.path.exists(INDEX_DIR):
-    os.mkdir(INDEX_DIR)
-ix = create_in(INDEX_DIR, schema)
-writer = ix.writer()
 
+if index.exists_in(INDEX_DIR):
+    ix = index.open_dir(INDEX_DIR)
+    writer = ix.writer()
+else:
+    ix = create_in(INDEX_DIR, schema)
+    writer = ix.writer()
 # ------------------ الزحف ------------------
 
 visited = set()
@@ -171,7 +147,6 @@ def crawl_site(start_url, max_pages):
 
         # استدعاء دالة calculate_trust_score المعدلة
         trust_score, credibility_types = calculate_trust_score(url, soup)
-        author = extract_author(soup)
 
         if trust_score >= 5:  # فقط الصفحات الموثوقة
             writer.add_document(
@@ -179,11 +154,10 @@ def crawl_site(start_url, max_pages):
                 title=title,
                 content=content,
                 trust_score=trust_score,
-                author=author,
                 credibility_types=",".join(credibility_types) # تخزين الأنواع كقائمة مفصولة بفاصلة
             )
             pages_crawled += 1
-            print(f"✅ Indexed (Trust Score: {trust_score}, Author: {author}, Types: {', '.join(credibility_types)})")
+            print(f"[{pages_crawled}]  Indexed - Trust Score: {trust_score} | Credibility: {', '.join(credibility_types)}")
 
         if max_pages > 0 and pages_crawled >= max_pages:
             break
@@ -201,4 +175,4 @@ for site in TARGET_SITES:
     crawl_site(site, MAX_PAGES_PER_SITE)
 
 writer.commit()
-print("✅ Crawling and indexing with trust score and credibility types completed.")
+print(" Crawling and indexing with trust score and credibility types completed.")

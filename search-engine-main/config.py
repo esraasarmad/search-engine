@@ -16,11 +16,13 @@ USER_AGENT = (
     "SportsSearchBot/1.0 (+https://example.com; research by Esraa Kablan)"
 )
 # List of target domains for crawling (University websites preferred)
+
 TARGET_SITES = [
-    "https://www.bbc.com/sport",        # BBC Sport
-    "https://www.nytimes.com/section/sports",  # NY Times Sports
-    "https://www.cbssports.com",        # CBS Sports
-    "https://www.skysports.com",        # Sky Sports
+    "https://www.goodreads.com/",        
+    "https://www.theguardian.com/books",       
+    "https://www.nytimes.com/section/books", 
+    "https://reedsy.com/discovery",
+    "https://www.gutenberg.org/" ,          
 ]
 
 # Crawling limits
